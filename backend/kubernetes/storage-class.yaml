@@ -1,0 +1,8 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ossc
+provisioner: kubernetes.io/gce-pd # This gotta be changed to exeternal OpenStack provisioner.
+parameters:
+  type: pd-standard
+  # type: pd-ssd

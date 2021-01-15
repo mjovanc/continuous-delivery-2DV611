@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./src/app.js",
+  "scripts": {
+    "test": "mocha --exit --timeout 15000 ./tests",
+    "mocha_help": "mocha -h",
+    "coverage": "npx nyc --reporter cobertura --reporter text mocha --exit --timeout 15000 ./tests",
+    "start": "node ./src/app.js",
+    "dev": "nodemon ./src/app.js -L",
+    "lint": "npx eslint .",
+    "lint:fix": "npx eslint . --fix"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "eslint": "^7.17.0",
+    "mocha": "^8.2.1",
+    "mockgoose": "^8.0.4",
+    "nodemon": "^2.0.6",
+    "nyc": "^15.1.0"
+  },
+  "dependencies": {
+    "axios": "^0.21.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.19.0",
+    "concurrently": "^5.3.0",
+    "cors": "^2.8.5",
+    "esm": "^3.2.25",
+    "express": "^4.17.1",
+    "helmet": "^4.2.0",
+    "http-errors": "^1.8.0",
+    "jsonwebtoken": "^8.5.1",
+    "mariadb": "^2.5.1",
+    "multer": "^1.4.2",
+    "mysql": "^2.18.1",
+    "nodemon": "^2.0.6",
+    "uuid": "^8.3.1"
+  }
+}

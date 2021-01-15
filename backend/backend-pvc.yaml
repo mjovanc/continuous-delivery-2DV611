@@ -1,0 +1,13 @@
+#### STEP 4 CREATE PVC ####
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mariadb-claim
+spec:
+  storageClassName: managed-nfs-storage
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi

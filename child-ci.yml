@@ -1,0 +1,131 @@
+# TODO: Add --cache-from to Docker? https://docs.gitlab.com/ee/ci/docker/using_docker_build.html
+variables:
+  PROJECT: oh222fv/2dv611-team2
+  IMAGE_NODE: node:14-alpine
+  IMAGE_PYTHON: python:3.8.7-alpine
+  IMAGE_GECKODRIVER: selenium/standalone-firefox
+  IMAGE_DEPLOY: bitnami/kubectl
+  URL_STAGING: http://cscloud6-254.lnu.se:8080
+  URL_PRODUCTION: http://cscloud6-254.lnu.se
+
+stages:
+  - build
+  - lint-test
+  - unit-test
+  - coverage-test
+  - build-image
+  - deploy-staging
+  - integration-test
+  - deploy-production
+  - smoke-test
+
+default:
+  before_script:
+    - cd $IMAGE
+
+build:
+  stage: build
+  image: $IMAGE_NODE
+  script:
+    - npm install
+  artifacts:
+    paths:
+      - $IMAGE/node_modules/
+
+lint-test:
+  stage: lint-test
+  image: $IMAGE_NODE
+  script:
+    - npm run lint
+
+unit-test:
+  stage: unit-test
+  image: $IMAGE_NODE
+  script:
+    - npm run test
+
+coverage-test:
+  stage: coverage-test
+  image: $IMAGE_NODE
+  script:
+    - npm run coverage
+  artifacts:
+    reports:
+      cobertura: $IMAGE/coverage/cobertura-coverage.xml
+    paths: 
+      - $IMAGE/coverage/cobertura-coverage.xml
+  only:
+    variables:
+      - $IMAGE == 'backend'
+
+build-image:
+  stage: build-image
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_ACCESS_TOKEN $CI_REGISTRY
+    - docker build -t $CI_REGISTRY/$PROJECT/$IMAGE:$CI_COMMIT_SHORT_SHA --build-arg REACT_APP_IMAGE=$IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker push $CI_REGISTRY/$PROJECT/$IMAGE:$CI_COMMIT_SHORT_SHA
+  tags:
+    - docker
+
+deploy-staging:
+  stage: deploy-staging
+  environment:
+    name: staging
+  image: $IMAGE_DEPLOY
+  script:
+    - kubectl delete secret docker-secret --ignore-not-found
+    - kubectl create secret docker-registry docker-secret --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_ACCESS_TOKEN
+    - sed -i "s/<IMAGE>/${IMAGE}/g" $IMAGE-manifest.yml
+    - sed -i "s/<IMAGE_VERSION>/${CI_COMMIT_SHORT_SHA}/g" $IMAGE-manifest.yml
+    - kubectl apply -f $IMAGE-manifest.yml
+  tags:
+    - staging
+
+integration-test:
+  stage: integration-test
+  image: $IMAGE_PYTHON
+  services:
+    - $IMAGE_GECKODRIVER
+  script:
+    - pip3 install selenium
+    - cd ../selenium
+    - python3 integration-test.py $URL_STAGING
+  tags:
+    - docker
+  only:
+    variables:
+      - $IMAGE == 'frontend'
+
+#PRODUCTION
+deploy-production:
+  stage: deploy-production
+  environment:
+    name: production
+  image: $IMAGE_DEPLOY
+  script:
+    - echo ${CI_COMMIT_SHORT_SHA}
+    - kubectl delete secret docker-secret --ignore-not-found
+    - kubectl create secret docker-registry docker-secret --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_ACCESS_TOKEN
+    - sed -i "s/<IMAGE>/${IMAGE}/g" $IMAGE-manifest-production.yml
+    - sed -i "s/<IMAGE_VERSION>/${CI_COMMIT_SHORT_SHA}/g" $IMAGE-manifest-production.yml
+    - kubectl apply -f $IMAGE-manifest-production.yml
+  tags:
+    - production
+  only:
+    variables:
+      - $DEPLOYMENT == 'production'
+
+smoke-test:
+  stage: smoke-test
+  image: $IMAGE_PYTHON
+  services:
+    - $IMAGE_GECKODRIVER
+  script:
+    - pip3 install selenium
+    - cd ../selenium
+    - python3 smoke-test.py $URL_PRODUCTION
+  tags:
+    - docker
+  only:
+    variables:
+      - ($DEPLOYMENT == 'production') && ($IMAGE == 'frontend')

@@ -1,0 +1,30 @@
+---
+stages:
+  - trigger_backend
+  - trigger_frontend
+
+trigger_backend:
+  stage: trigger_backend
+  variables:
+    IMAGE: backend
+    DEPLOYMENT: $DEPLOYMENT
+  trigger:
+    include:
+      - local: child-ci.yml
+    strategy: depend
+  rules:
+    - changes:
+        - backend/**/*
+
+trigger_frontend:
+  stage: trigger_frontend
+  variables:
+    IMAGE: frontend
+    DEPLOYMENT: $DEPLOYMENT
+  trigger:
+    include:
+      - local: child-ci.yml
+    strategy: depend
+  rules:
+    - changes:
+        - frontend/**/*

@@ -1,0 +1,14 @@
+---
+- name: Delete instances
+  hosts: localhost
+  tasks:
+    - name: Delete openstack instance
+      include_role:
+        name: instance_openstack_delete
+      vars:
+        instance_name: "{{ item.name }}"
+      loop:
+        - name: "{{ master_name }}"
+        - name: "k8s-node-1-{{ ENVIRONMENT_NAME }}"
+        - name: "k8s-node-2-{{ ENVIRONMENT_NAME }}"
+        - name: "k8s-node-3-{{ ENVIRONMENT_NAME }}"

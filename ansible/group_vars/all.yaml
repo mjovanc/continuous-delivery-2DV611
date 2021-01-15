@@ -1,0 +1,19 @@
+ENVIRONMENT_NAME: production
+
+#Ansible Control Node /Kubernetes Master
+master_name: "k8s-master-{{ ENVIRONMENT_NAME }}"
+master_flavor: c2-r4-d20
+master_ip: 194.47.176.240
+master_key: cscloud-oh222fv
+
+#Ansible Hosts /Kubernetes Nodes
+node_key: "node-{{ ENVIRONMENT_NAME }}"
+
+#OpenStack Network Settings
+network_name: lan
+subnet_name: lan-subnet
+subnet_cidr: 172.16.0.0/24
+router_name: router
+
+#Kubernetes Cluster
+cluster_cidr: 192.168.0.0/16

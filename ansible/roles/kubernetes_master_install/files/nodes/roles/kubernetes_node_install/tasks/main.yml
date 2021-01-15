@@ -1,0 +1,30 @@
+---
+- name: Ubuntu update 
+  become: yes   
+  apt:
+    update_cache: yes
+
+- name: Copy cloud-init.sh to instance
+  become: yes
+  copy:
+    src: cloud-init.sh
+    dest: "{{ path_home }}/cloud-init.sh"
+
+- name: Run the cloud-init.sh
+  become: yes
+  command: sh {{ path_home }}/cloud-init.sh
+
+- name: Copy join command
+  copy:
+    src: "{{ path_home }}/joincommand.txt"
+    dest: "{{ path_home }}/joincommand.txt"
+
+- name: Get join command
+  slurp:
+    src: "{{ path_home }}/joincommand.txt"
+  register: join_command
+
+- name: Join cluster
+  become: yes
+  command: "{{ join_command.content | b64decode }}"
+

@@ -1,0 +1,9 @@
+---
+- name: Create subnet
+  os_subnet:
+    network_name: "{{network_name}}"
+    name: "{{subnet_name}}"
+    cidr: "{{subnet_cidr}}"
+    dns_nameservers:
+      - 194.47.199.41
+      - 194.47.110.97

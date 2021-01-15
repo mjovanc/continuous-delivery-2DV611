@@ -1,0 +1,247 @@
+---
+- name: Ubuntu update
+  become: yes   
+  apt:
+    update_cache: yes
+
+- name: Install Ansible
+  become: yes
+  apt:
+    name: ansible
+    state: latest
+    
+- name: Install pip3
+  become: yes
+  apt:
+    name: python3-pip
+    state: latest
+    
+- name: Install Openstack SDK
+  become: yes
+  shell:
+    pip3 install openstacksdk
+
+- name: Copy ansible.cfg to control node
+  become: yes
+  template:
+    src: ansible.cfg.j2
+    dest: /etc/ansible/ansible.cfg
+
+# Install docker and kubernetes
+- name: Copy cloud-init.sh to instance
+  become: yes
+  copy:
+    src: cloud-init.sh
+    dest: "{{ path_home }}/cloud-init.sh"
+
+- name: Run the cloud-init.sh
+  become: yes
+  command: sh {{ path_home }}/cloud-init.sh
+
+# Install kubernetes cluster
+- name: Reset Kubernetes cluster
+  become: yes
+  shell: kubeadm reset --force
+  register: reset_cluster
+
+- name: Init Kubernetes cluster
+  when: reset_cluster is succeeded
+  become: yes
+  command: kubeadm init --pod-network-cidr={{ cluster_cidr }}
+  register: cluster
+
+- name: Create Kubernetes config directory
+  file:
+    path: "{{ path_home }}/.kube/"
+    state: directory
+
+- name: Copy admin.conf to Home directory
+  when: cluster is succeeded
+  become: yes
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ path_home }}/.kube/config"
+    owner: ubuntu
+    group: ubuntu
+    mode: 0755
+    remote_src: true
+
+# Get join command
+- name: Get join command
+  become: yes
+  command: kubeadm token create --print-join-command
+  register: join_command
+
+- name: Write join command to file
+  copy:
+    content: "{{ join_command.stdout }}"
+    dest: "{{ path_home }}/joincommand.txt"
+
+# Install Calico
+- name: Get Calico
+  get_url:
+    url: https://docs.projectcalico.org/manifests/calico.yaml
+    dest: "{{ path_home }}/calico.yaml"
+    mode: 0755
+
+- name: Apply Calico
+  command: kubectl apply -f {{ path_home }}/calico.yaml
+
+- name: Remove Calico yaml file
+  become: yes
+  file:
+    path: "{{ path_home }}/calico.yaml"
+    state: absent
+
+#Integrate Gitlab
+- name: Copy ServiceAccount
+  copy:
+    src: gitlab-admin-service-account.yaml
+    dest: "{{ path_home }}/gitlab-admin-service-account.yaml"
+
+- name: Apply ServiceAccount
+  command: kubectl apply -f {{ path_home }}/gitlab-admin-service-account.yaml
+
+- name: Get secret name
+  shell: kubectl get secrets | grep -o 'default-token-[^ ,]\+'
+  register: secret
+
+- name: Get CA certificate
+  shell: kubectl get secret {{ secret.stdout }} -o jsonpath="{['data']['ca\.crt']}" | base64 --decode
+  register: cacert
+
+- name: Get authentication token
+  shell: kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep gitlab | awk '{print $1}') | grep -o 'eyJ[^ ,]\+'
+  register: authtoken
+
+- name: Write join command to file
+  copy:
+    content: "URL: \nhttps://{{ master_ip }}:6443 \n\nCAcert: \n{{ cacert.stdout }}  \n\nToken: \n{{ authtoken.stdout }}"
+    dest: "{{ path_home }}/gitlab.txt"
+
+- name: Remove ServiceAccount yaml file
+  become: yes
+  file:
+    path: "{{ path_home }}/gitlab-admin-service-account.yaml"
+    state: absent
+
+#Update the API server's certificate
+- name: Copy kubeadm.yaml
+  copy:
+    src: kubeadm.yaml
+    dest: "{{ path_home }}/kubeadm.yaml"
+
+- name: Delete old apiserver cert
+  become: yes
+  file: 
+    path: /etc/kubernetes/pki/apiserver.crt
+    state: absent
+
+- name: Delete old apiserver key
+  become: yes
+  file: 
+    path: /etc/kubernetes/pki/apiserver.key
+    state: absent
+
+- name: Generate new certificate
+  become: yes
+  command: kubeadm init phase certs apiserver --config {{ path_home }}/kubeadm.yaml
+
+- name: Get apiserver container id
+  become: yes
+  shell: docker ps | grep kube-apiserver | grep -v pause | grep -o "^\w*\b"
+  register: container_id
+
+- name: Restart API server
+  become: yes
+  command: docker kill {{ container_id.stdout }}
+
+- name: Remove kubeadm.yaml
+  become: yes
+  file:
+    path: "{{ path_home }}/kubeadm.yaml"
+    state: absent
+
+# Create keypair for hosts/nodes  
+- name: Copy clouds.yaml to control node
+  become: yes
+  copy:
+    src: clouds.yaml
+    dest: "{{ path_home }}/clouds.yaml"
+    
+- name: Delete old key from openstack
+  os_keypair:
+    name: "{{ node_key }}"
+    state: absent
+  tags: [ key ]
+  
+- name: Generate new SSH keypair on openstack
+  os_keypair:
+    name: "{{ node_key }}"
+  register: keypair
+  tags: [ key ]
+
+- name: Create private key
+  copy:
+    content: "{{ keypair.key.private_key }}"
+    dest: "{{ path_home }}/.ssh/{{ keypair.key.name }}"
+    mode: '400' 
+  tags: [ key ]
+
+- name: Remove clouds.yaml from home
+  become: yes
+  file:
+    path: "{{ path_home }}/clouds.yaml"
+    state: absent
+
+# Installing nodes
+- name: Copy nodes
+  become: yes
+  copy:
+    src: nodes/
+    dest: "{{ path_home }}/ansible"
+
+- name: Run ansible playbook
+  command: ansible-playbook ansible/site.yml
+
+#Removing old files
+- name: Remove ansible files
+  become: yes
+  file:
+    path: "{{ path_home }}/ansible/"
+    state: absent
+
+- name: Remove cloud-init
+  become: yes
+  file:
+    path: "{{ path_home }}/cloud-init.sh"
+    state: absent
+
+
+##Install helm
+#- name: Get Helm
+#  get_url:
+#    url: https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+#    dest: "{{ path_home }}/get_helm.sh"
+#    mode: 0700
+#
+#- name: Install helm DOESNT WORK YET!!!!
+#  become: yes
+#  shell: sh {{ path_home }}/get_helm.sh
+#
+#- name: Remove helm script
+#  become: yes
+#  file:
+#    path: "{{ path_home }}/get_helm.sh"
+#    state: absent
+
+#Create namespace
+- name: Create namespace
+  command: kubectl create namespace {{ ENVIRONMENT_NAME }}-{{ ENVIRONMENT_NAME }}
+
+#Install ingress-controller
+- name: Install ingress-controller
+  shell: |
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+    helm install ingress-controller -n {{ ENVIRONMENT_NAME }}-{{ ENVIRONMENT_NAME }} ingress-nginx/ingress-nginx

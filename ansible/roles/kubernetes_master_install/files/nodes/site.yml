@@ -1,0 +1,39 @@
+---
+- name: Create nodes
+  hosts: localhost
+  tasks:
+    - name: Create openstack instances
+      include_role:
+        name: instance_private_openstack_create
+      vars:
+        instance_name: "{{ item.name }}"
+        instance_flavor: c2-r4-d20
+        instance_key_name: "{{ node_key }}"
+        instance_auto_ip: "{{ item.auto_ip }}"
+        instance_security_groups: "{{ item.security_groups }}"
+        instance_group_name: "{{ item.group_name }}"
+      loop:
+        - name: "k8s-node-1-{{ ENVIRONMENT_NAME }}"
+          auto_ip: no
+          security_groups: default,NFS
+          group_name: node
+        - name: "k8s-node-2-{{ ENVIRONMENT_NAME }}"
+          auto_ip: no
+          security_groups: default,NFS
+          group_name: node
+        - name: "k8s-node-3-{{ ENVIRONMENT_NAME }}"
+          auto_ip: no
+          security_groups: default,NFS
+          group_name: node
+    - name: Wait for SSH to be ready for nodes
+      pause:
+        seconds: 60
+
+- name: Install nodes
+  hosts: node
+  roles:
+    - kubernetes_node_install
+  tasks:
+  - name: Wait for nodes to get ready?
+    pause:
+      seconds: 60

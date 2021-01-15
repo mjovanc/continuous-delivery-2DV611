@@ -1,0 +1,3 @@
+FROM mariadb:10.5
+
+COPY sql/init-staging.sql /docker-entrypoint-initdb.d/init.sql

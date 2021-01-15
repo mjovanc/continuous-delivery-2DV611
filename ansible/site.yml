@@ -1,0 +1,56 @@
+---
+- name: Create initial infrastructure on openstack
+  hosts: localhost
+  roles:
+    - initial_infrastructure_openstack_create    
+  tasks:  
+    - name: Wait for interface to attach
+      pause:
+        seconds: 60
+
+- name: Create security groups
+  hosts: localhost
+  tasks:
+    - name: Creating security groups
+      include_role:
+        name: security_groups_openstack_create
+      vars:
+        security_group_name: "{{ item.name }}"
+        security_group_port: "{{ item.port }}"
+        security_group_state: present
+      loop:
+        - name: SSH
+          port: 22
+        - name: HTTP
+          port: 80
+        - name: kubernetes
+          port: 6443
+        - name: NFS
+          port: 2049
+    - name: Wait for security groups to be created
+      pause:
+        seconds: 20
+
+- name: Create master
+  hosts: localhost
+  roles:
+    - role: instance_public_openstack_create
+      vars:
+        instance_name: "{{ master_name }}"
+        instance_flavor: "{{ master_flavor }}"
+        instance_key_name: "{{ master_key }}"
+        instance_security_groups: default,SSH,HTTP,kubernetes,NFS
+        instance_floating_ip: "{{ master_ip }}"
+  tasks:
+  - name: Wait for SSH to be ready for master
+    pause:
+      seconds: 60
+
+- name: Install Kubernetes
+  hosts: master
+  roles:
+    - kubernetes_master_install
+  tasks:
+  - name: Wait for something?
+    pause:
+      seconds: 60
